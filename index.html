@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#071014" />
+    <meta
+      name="description"
+      content="Eisenwacht: Nullsektor – ein eigenständiger Retro-Raycaster im Stil klassischer 90er-FPS."
+    />
+    <title>Eisenwacht: Nullsektor</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="game-shell" class="game-shell" aria-label="Eisenwacht: Nullsektor">
+      <canvas id="game" width="640" height="360" aria-label="Spielansicht"></canvas>
+
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="scanlines" aria-hidden="true"></div>
+      <div id="damage-flash" class="damage-flash" aria-hidden="true"></div>
+      <div id="pickup-flash" class="pickup-flash" aria-hidden="true"></div>
+
+      <section id="hud" class="hud" aria-label="Statusanzeige">
+        <div class="hud-top">
+          <div class="mission-chip">
+            <span id="mission-number" class="eyebrow">M01</span>
+            <strong id="mission-name">Der Korridor</strong>
+          </div>
+          <div id="objective" class="objective">Datenkern sichern</div>
+          <div class="score-chip"><span>PUNKTE</span><strong id="score">000000</strong></div>
+        </div>
+
+        <div id="message" class="message" role="status"></div>
+        <div id="crosshair" class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+        <div id="boss-wrap" class="boss-wrap" hidden>
+          <div class="boss-label"><span>DER VERWALTER</span><b id="boss-health-text">100%</b></div>
+          <div class="boss-track"><i id="boss-health"></i></div>
+        </div>
+
+        <div class="hud-bottom">
+          <div class="stat health-stat">
+            <span class="stat-icon">+</span>
+            <div><small>VITAL</small><strong id="health">100</strong></div>
+            <div class="meter"><i id="health-bar"></i></div>
+          </div>
+
+          <div class="inventory">
+            <span id="key-indicator" class="inventory-item">SCHLÜSSEL <b>—</b></span>
+            <span id="core-indicator" class="inventory-item">KERN <b>—</b></span>
+          </div>
+
+          <div class="weapon-stat">
+            <div class="weapon-name"><small id="weapon-slot">01</small><span id="weapon-name">V9 DIENSTPISTOLE</span></div>
+            <strong class="ammo"><span id="clip">12</span><em>/</em><small id="reserve">48</small></strong>
+          </div>
+        </div>
+      </section>
+
+      <section id="title-screen" class="overlay title-screen">
+        <div class="title-rail"><span>SONDERAUSGABE // 1993–∞</span><span>AKTE NW-04</span></div>
+        <div class="title-content">
+          <div class="kicker">DIE MASCHINE TRÄUMT. DU BRICHST EIN.</div>
+          <h1><span>EISEN</span><span>WACHT</span></h1>
+          <div class="subtitle"><b>NULL</b>SEKTOR</div>
+          <p class="intro">
+            Unter den Ruinen von Hohenfels sendet eine autonome Festung wieder. Drei Sektoren.
+            Ein letzter Aufzug. Keine Verstärkung.
+          </p>
+
+          <div class="difficulty" aria-label="Schwierigkeitsgrad wählen">
+            <button type="button" data-difficulty="rekrut">
+              <span>REKRUT</span><small>weniger Schaden</small>
+            </button>
+            <button type="button" data-difficulty="agent" class="primary">
+              <span>AGENT</span><small>empfohlen</small>
+            </button>
+            <button type="button" data-difficulty="albtraum">
+              <span>ALBTRAUM</span><small>keine Gnade</small>
+            </button>
+          </div>
+
+          <div class="controls-grid">
+            <span><kbd>WASD</kbd> bewegen</span>
+            <span><kbd>MAUS</kbd> zielen</span>
+            <span><kbd>KLICK</kbd> feuern</span>
+            <span><kbd>E</kbd> benutzen</span>
+            <span><kbd>R</kbd> laden</span>
+            <span><kbd>SHIFT</kbd> sprinten</span>
+          </div>
+        </div>
+        <div class="title-footer"><span>ORIGINAL-RAYCASTER</span><span>KEINE EXTERNEN ASSETS</span></div>
+      </section>
+
+      <section id="pause-screen" class="overlay compact-overlay" hidden>
+        <div class="compact-panel">
+          <span class="eyebrow">SYSTEMHALT</span>
+          <h2>PAUSE</h2>
+          <p>Der Nullsektor wartet.</p>
+          <button id="resume-button" type="button" class="action-button">WEITER</button>
+          <button id="mute-button" type="button" class="text-button">TON: AN</button>
+        </div>
+      </section>
+
+      <section id="end-screen" class="overlay compact-overlay" hidden>
+        <div class="compact-panel end-panel">
+          <span id="end-kicker" class="eyebrow">EINSATZ BEENDET</span>
+          <h2 id="end-title">GEFALLEN</h2>
+          <p id="end-copy">Der Nullsektor sendet weiter.</p>
+          <div class="end-score"><span>ENDPUNKTZAHL</span><strong id="end-score-value">000000</strong></div>
+          <button id="restart-button" type="button" class="action-button">NEUER VERSUCH</button>
+        </div>
+      </section>
+
+      <div id="touch-controls" class="touch-controls" aria-hidden="true">
+        <div id="touch-stick" class="touch-stick"><i></i></div>
+        <div id="touch-look" class="touch-look"></div>
+        <button id="touch-use" type="button">E</button>
+        <button id="touch-fire" type="button">FEUER</button>
+      </div>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>

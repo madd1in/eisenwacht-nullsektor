@@ -1,0 +1,19 @@
+{
+  "name": "Eisenwacht: Nullsektor",
+  "short_name": "Eisenwacht",
+  "description": "Ein eigenständiger Retro-Raycaster mit drei Missionen.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#020405",
+  "theme_color": "#071014",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
