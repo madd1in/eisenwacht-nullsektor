@@ -2,12 +2,16 @@
   "use strict";
 
   const canvas = document.querySelector("#game");
+  const compactRender = matchMedia("(pointer: coarse)").matches || (globalThis.navigator?.hardwareConcurrency ?? 8) <= 4;
+  canvas.width = compactRender ? 400 : 480;
+  canvas.height = compactRender ? 225 : 270;
   const ctx = canvas.getContext("2d", { alpha: false });
   const W = canvas.width;
   const H = canvas.height;
   const FOV = Math.PI / 3;
   const PROJECTION = W / 2 / Math.tan(FOV / 2);
   const TAU = Math.PI * 2;
+  const RAY_STRIDE = 2;
 
   ctx.imageSmoothingEnabled = false;
 
@@ -48,6 +52,9 @@
     touchFire: document.querySelector("#touch-fire"),
     touchUse: document.querySelector("#touch-use"),
   };
+  ui.keyValue = ui.key.querySelector("b");
+  ui.coreValue = ui.core.querySelector("b");
+  ui.touchStickKnob = ui.touchStick.querySelector("i");
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const normalizeAngle = (angle) => {
@@ -258,6 +265,7 @@
     pickupFlash: 0,
     messageUntil: 0,
     messageText: "",
+    messageVisible: false,
     moveBob: 0,
     moving: 0,
     totalKills: 0,
@@ -727,6 +735,8 @@
         alert: false,
         flash: 0,
         muzzle: 0,
+        losTimer: Math.random() * 0.1,
+        visible: false,
         alive: true,
         phase: Math.random() * TAU,
       };
@@ -846,6 +856,7 @@
   function showMessage(text, duration = 2.2) {
     state.messageText = text;
     state.messageUntil = state.time + duration;
+    state.messageVisible = true;
     ui.message.textContent = text;
     ui.message.classList.add("show");
   }
@@ -875,8 +886,8 @@
     ui.healthBar.style.background = state.player.health < 30 ? "#ff4f32" : "#70f6e2";
     ui.key.classList.toggle("active", state.hasKey);
     ui.core.classList.toggle("active", state.levelCore);
-    ui.key.querySelector("b").textContent = state.hasKey ? "◆" : "—";
-    ui.core.querySelector("b").textContent = state.levelCore ? "◆" : "—";
+    ui.keyValue.textContent = state.hasKey ? "◆" : "—";
+    ui.coreValue.textContent = state.levelCore ? "◆" : "—";
     ui.weaponSlot.textContent = weapon.slot;
     ui.weaponName.textContent = weapon.name;
     ui.clip.textContent = ammo.clip.toString().padStart(2, "0");
@@ -1111,7 +1122,12 @@
       const dx = player.x - enemy.x;
       const dy = player.y - enemy.y;
       const distance = Math.hypot(dx, dy);
-      const visible = distance < 11 && hasLineOfSight(enemy);
+      enemy.losTimer -= dt;
+      if (enemy.losTimer <= 0) {
+        enemy.visible = distance < 11 && hasLineOfSight(enemy);
+        enemy.losTimer = 0.08 + Math.random() * 0.055;
+      }
+      const visible = enemy.visible;
       if (!enemy.alert && (visible || (state.soundAlert > 0 && distance < 9))) enemy.alert = true;
       if (!enemy.alert) continue;
 
@@ -1161,13 +1177,13 @@
       - input.stickY;
     const strafe = (input.keys.has("KeyD") ? 1 : 0) - (input.keys.has("KeyA") ? 1 : 0) + input.stickX;
     const turn = (input.keys.has("ArrowRight") ? 1 : 0) - (input.keys.has("ArrowLeft") ? 1 : 0);
-    player.dir = normalizeAngle(player.dir + turn * dt * 2.25);
+    player.dir = normalizeAngle(player.dir + turn * dt * 2.9);
     let magnitude = Math.hypot(forward, strafe);
     state.moving = Math.min(1, magnitude);
     if (magnitude > 0.05) {
       magnitude = Math.max(1, magnitude);
       const sprint = input.keys.has("ShiftLeft") || input.keys.has("ShiftRight");
-      const speed = 2.28 * (sprint ? 1.52 : 1) * dt;
+      const speed = 3.05 * (sprint ? 1.65 : 1) * dt;
       const normForward = forward / magnitude;
       const normStrafe = strafe / magnitude;
       const dx = (Math.cos(player.dir) * normForward + Math.cos(player.dir + Math.PI / 2) * normStrafe) * speed;
@@ -1179,24 +1195,38 @@
     if (input.firing && WEAPONS[player.weapon].automatic && state.fireCooldown <= 0) shoot();
     updateEnemies(dt);
     updateItems();
-    if (state.messageUntil < state.time) ui.message.classList.remove("show");
+    if (state.messageVisible && state.messageUntil < state.time) {
+      state.messageVisible = false;
+      ui.message.classList.remove("show");
+    }
     ui.damageFlash.style.opacity = state.damageFlash.toFixed(2);
     ui.pickupFlash.style.opacity = state.pickupFlash.toFixed(2);
-    updateHud();
   }
 
-  function drawBackground(horizon) {
-    const ceiling = ctx.createLinearGradient(0, 0, 0, horizon);
-    ceiling.addColorStop(0, "#05090d");
-    ceiling.addColorStop(1, state.level.ceiling);
-    ctx.fillStyle = ceiling;
-    ctx.fillRect(0, 0, W, horizon);
+  function makeGradientStrip(start, end) {
+    const strip = document.createElement("canvas");
+    strip.width = 1;
+    strip.height = 64;
+    const stripContext = strip.getContext("2d");
+    const gradient = stripContext.createLinearGradient(0, 0, 0, 64);
+    gradient.addColorStop(0, start);
+    gradient.addColorStop(1, end);
+    stripContext.fillStyle = gradient;
+    stripContext.fillRect(0, 0, 1, 64);
+    return strip;
+  }
 
-    const floor = ctx.createLinearGradient(0, horizon, 0, H);
-    floor.addColorStop(0, state.level.floor);
-    floor.addColorStop(1, "#030506");
-    ctx.fillStyle = floor;
-    ctx.fillRect(0, horizon, W, H - horizon);
+  const backgroundStrips = LEVELS.map((level) => ({
+    ceiling: makeGradientStrip("#05090d", level.ceiling),
+    floor: makeGradientStrip(level.floor, "#030506"),
+  }));
+  const zBuffer = new Float32Array(W);
+  const renderQueue = [];
+
+  function drawBackground(horizon) {
+    const strips = backgroundStrips[state.levelIndex];
+    ctx.drawImage(strips.ceiling, 0, 0, 1, 64, 0, 0, W, horizon);
+    ctx.drawImage(strips.floor, 0, 0, 1, 64, 0, horizon, W, H - horizon);
 
     ctx.fillStyle = "rgba(112,246,226,.035)";
     for (let y = horizon + 20; y < H; y += Math.max(7, Math.floor((y - horizon) * 0.22))) ctx.fillRect(0, y, W, 1);
@@ -1219,39 +1249,54 @@
     const left = screenX - width / 2;
     const startX = Math.max(0, Math.floor(left));
     const endX = Math.min(W - 1, Math.ceil(left + width));
-    for (let screen = startX; screen <= endX; screen += 1) {
-      if (distance >= zBuffer[screen]) continue;
-      const sourceX = Math.floor(((screen - left) / width) * sprite.width);
-      if (sourceX < 0 || sourceX >= sprite.width) continue;
-      ctx.drawImage(sprite, sourceX, 0, 1, sprite.height, screen, top, 1.2, height);
+    let runStart = -1;
+    for (let screen = startX; screen <= endX + 1; screen += 1) {
+      const visible = screen <= endX && distance < zBuffer[screen];
+      if (visible && runStart < 0) runStart = screen;
+      if ((!visible || screen > endX) && runStart >= 0) {
+        const runEnd = screen - 1;
+        const sourceStart = clamp(((runStart - left) / width) * sprite.width, 0, sprite.width);
+        const sourceEnd = clamp((((runEnd + 1) - left) / width) * sprite.width, 0, sprite.width);
+        ctx.drawImage(
+          sprite,
+          sourceStart,
+          0,
+          Math.max(0.1, sourceEnd - sourceStart),
+          sprite.height,
+          runStart,
+          top,
+          runEnd - runStart + 1,
+          height
+        );
+        runStart = -1;
+      }
     }
   }
 
   function drawWorld(horizon) {
-    const zBuffer = new Float32Array(W);
-    for (let x = 0; x < W; x += 1) {
-      const rayAngle = state.player.dir - FOV / 2 + (x / W) * FOV;
+    for (let x = 0; x < W; x += RAY_STRIDE) {
+      const rayAngle = state.player.dir - FOV / 2 + ((x + RAY_STRIDE * 0.5) / W) * FOV;
       const hit = castRay(rayAngle);
       const corrected = hit.distance * Math.cos(rayAngle - state.player.dir);
-      zBuffer[x] = corrected;
+      for (let column = 0; column < RAY_STRIDE && x + column < W; column += 1) zBuffer[x + column] = corrected;
       const wallHeight = Math.min(H * 8, PROJECTION / corrected);
       const top = horizon - wallHeight / 2;
       const texture = textures[hit.tile] || textures["1"];
-      ctx.drawImage(texture, hit.texX, 0, 1, 64, x, top, 1.1, wallHeight);
+      ctx.drawImage(texture, hit.texX, 0, 1, 64, x, top, RAY_STRIDE + 0.2, wallHeight);
       const darkness = clamp(corrected / 14 + (hit.side ? 0.1 : 0), 0.04, 0.78);
       ctx.fillStyle = `rgba(2,6,7,${darkness})`;
-      ctx.fillRect(x, top, 1.1, wallHeight);
+      ctx.fillRect(x, top, RAY_STRIDE + 0.2, wallHeight);
     }
 
-    const renderables = [];
+    renderQueue.length = 0;
     for (const item of state.items) {
-      if (item.alive) renderables.push({ kind: "item", ref: item, distance: Math.hypot(item.x - state.player.x, item.y - state.player.y) });
+      if (item.alive) renderQueue.push({ kind: "item", ref: item, distance: Math.hypot(item.x - state.player.x, item.y - state.player.y) });
     }
     for (const enemy of state.enemies) {
-      if (enemy.alive) renderables.push({ kind: "enemy", ref: enemy, distance: Math.hypot(enemy.x - state.player.x, enemy.y - state.player.y) });
+      if (enemy.alive) renderQueue.push({ kind: "enemy", ref: enemy, distance: Math.hypot(enemy.x - state.player.x, enemy.y - state.player.y) });
     }
-    renderables.sort((a, b) => b.distance - a.distance);
-    for (const renderable of renderables) {
+    renderQueue.sort((a, b) => b.distance - a.distance);
+    for (const renderable of renderQueue) {
       if (renderable.kind === "item") {
         const item = renderable.ref;
         const bob = Math.sin(state.time * 3.2 + item.phase) * 0.16;
@@ -1284,6 +1329,8 @@
     const reloadProgress = state.reloadTimer > 0 ? Math.sin((state.reloadTimer / WEAPONS[state.player.weapon].reload) * Math.PI) : 0;
     ctx.save();
     ctx.translate(W / 2 + bobX + reloadProgress * 24, H + bobY - recoil + reloadProgress * 38);
+    const weaponScale = H / 360;
+    ctx.scale(weaponScale, weaponScale);
     ctx.rotate(reloadProgress * 0.35);
 
     ctx.fillStyle = "#705046";
@@ -1421,10 +1468,18 @@
     return issues;
   }
 
+  function simulateElapsed(elapsed) {
+    let remaining = Math.min(0.08, Math.max(0, elapsed));
+    while (remaining > 0) {
+      const step = Math.min(0.033, remaining);
+      update(step);
+      remaining -= step;
+    }
+  }
+
   function loop(time) {
-    const dt = Math.min(0.034, Math.max(0, (time - state.lastTime) / 1000));
+    simulateElapsed((time - state.lastTime) / 1000);
     state.lastTime = time;
-    update(dt);
     render();
     requestAnimationFrame(loop);
   }
@@ -1474,8 +1529,8 @@
 
   window.addEventListener("mousemove", (event) => {
     if (document.pointerLockElement !== canvas || state.mode !== "running") return;
-    state.player.dir = normalizeAngle(state.player.dir + event.movementX * 0.00225);
-    state.player.pitch = clamp(state.player.pitch + event.movementY * 0.13, -45, 45);
+    state.player.dir = normalizeAngle(state.player.dir + event.movementX * 0.0028);
+    state.player.pitch = clamp(state.player.pitch + event.movementY * 0.15, -45, 45);
   });
 
   document.addEventListener("pointerlockchange", () => {
@@ -1499,7 +1554,7 @@
     stickPointer = null;
     input.stickX = 0;
     input.stickY = 0;
-    ui.touchStick.querySelector("i").style.transform = "translate(0, 0)";
+    ui.touchStickKnob.style.transform = "translate(0, 0)";
   };
   ui.touchStick.addEventListener("pointerdown", (event) => {
     stickPointer = event.pointerId;
@@ -1512,7 +1567,7 @@
     const dy = clamp(event.clientY - (rect.top + rect.height / 2), -38, 38);
     input.stickX = dx / 38;
     input.stickY = dy / 38;
-    ui.touchStick.querySelector("i").style.transform = `translate(${dx}px, ${dy}px)`;
+    ui.touchStickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
   });
   ui.touchStick.addEventListener("pointerup", resetStick);
   ui.touchStick.addEventListener("pointercancel", resetStick);
@@ -1558,6 +1613,9 @@
     interact,
     shoot,
     completeLevel,
+    input,
+    render,
+    simulateElapsed,
   };
   requestAnimationFrame(loop);
 })();

@@ -15,6 +15,8 @@ function makeClassList() {
   };
 }
 
+const canvasMetrics = { drawImage: 0, fillRect: 0 };
+
 function makeContext() {
   const gradient = { addColorStop() {} };
   const target = {
@@ -23,6 +25,8 @@ function makeContext() {
     getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
     putImageData() {},
     measureText: () => ({ width: 0 }),
+    drawImage: () => { canvasMetrics.drawImage += 1; },
+    fillRect: () => { canvasMetrics.fillRect += 1; },
   };
   return new Proxy(target, {
     get(object, key) {
@@ -123,6 +127,19 @@ assert.equal(game.state.mode, "running");
 assert.equal(game.state.levelIndex, 0);
 assert.equal(game.state.player.health, 100);
 
+const startX = game.state.player.x;
+const startY = game.state.player.y;
+game.input.keys.add("KeyW");
+game.simulateElapsed(0.066);
+game.input.keys.delete("KeyW");
+const movement = Math.hypot(game.state.player.x - startX, game.state.player.y - startY);
+assert.ok(movement > 0.18, "a 66ms frame should preserve real-time movement instead of slowing the simulation");
+
+canvasMetrics.drawImage = 0;
+canvasMetrics.fillRect = 0;
+game.render();
+assert.ok(canvasMetrics.drawImage < 350, `batched renderer should stay below 350 draw calls, got ${canvasMetrics.drawImage}`);
+
 const ammoBefore = game.state.player.arsenal.pistol.clip;
 game.shoot();
 assert.equal(game.state.player.arsenal.pistol.clip, ammoBefore - 1, "shooting should consume one round");
@@ -132,4 +149,6 @@ game.completeLevel();
 assert.equal(game.state.levelIndex, 1, "completing a mission should load the next one");
 assert.equal(game.state.levelCore, false, "mission inventory should reset between levels");
 
-console.log("Eisenwacht smoke test passed: 3 missions, valid maps, start, combat, transition.");
+console.log(
+  `Eisenwacht smoke test passed: 3 missions, ${(movement / 0.066).toFixed(2)} movement units/s, ${canvasMetrics.drawImage} render draw calls.`
+);

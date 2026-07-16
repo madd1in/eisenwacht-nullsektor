@@ -68,9 +68,8 @@ button {
 
 .scanlines {
   z-index: 4;
-  opacity: 0.18;
+  opacity: 0.13;
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 0, 0, 0.3) 3px 4px);
-  mix-blend-mode: multiply;
 }
 
 .damage-flash,
@@ -133,7 +132,6 @@ button {
   background: linear-gradient(135deg, rgba(5, 15, 18, 0.88), rgba(5, 15, 18, 0.45));
   border-left: 2px solid var(--cyan);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(4px);
 }
 
 .mission-chip {
