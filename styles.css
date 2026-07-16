@@ -182,6 +182,85 @@ button {
   color: var(--amber);
 }
 
+.nav-panel {
+  position: absolute;
+  top: clamp(78px, 10.5vw, 116px);
+  right: clamp(14px, 2.2vw, 30px);
+  width: 142px;
+  padding: 7px;
+  background: linear-gradient(145deg, rgba(4, 14, 17, 0.9), rgba(4, 10, 12, 0.62));
+  border: 1px solid rgba(112, 246, 226, 0.24);
+  border-right: 2px solid var(--cyan);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.compass-strip,
+.waypoint-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.compass-strip {
+  min-height: 20px;
+  padding: 0 3px 6px;
+  border-bottom: 1px solid rgba(112, 246, 226, 0.2);
+}
+
+.compass-strip span,
+.waypoint-readout small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.compass-strip strong {
+  color: var(--cyan);
+  font: 900 10px ui-monospace, monospace;
+  text-shadow: 0 0 9px rgba(112, 246, 226, 0.65);
+}
+
+#minimap {
+  display: block;
+  width: 128px;
+  height: 128px;
+  margin: 6px 0;
+  background: rgba(1, 7, 9, 0.82);
+  image-rendering: pixelated;
+}
+
+.waypoint-readout {
+  min-height: 27px;
+  padding: 5px 4px 0;
+  border-top: 1px solid rgba(112, 246, 226, 0.2);
+}
+
+.waypoint-readout i {
+  display: block;
+  width: 22px;
+  height: 22px;
+  color: var(--amber);
+  font-style: normal;
+  font-size: 17px;
+  line-height: 22px;
+  text-align: center;
+  transform-origin: 50% 50%;
+  text-shadow: 0 0 10px rgba(255, 181, 69, 0.75);
+  transition: transform 90ms linear;
+}
+
+.waypoint-readout span {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.waypoint-readout b {
+  color: var(--paper);
+  font: 900 11px ui-monospace, monospace;
+}
+
 .message {
   position: absolute;
   left: 50%;
@@ -725,6 +804,12 @@ kbd {
   .weapon-stat { min-width: 150px; }
   .weapon-name { display: none; }
   .controls-grid { display: none; }
+  .nav-panel {
+    top: 70px;
+    width: 104px;
+    padding: 5px;
+  }
+  #minimap { width: 92px; height: 92px; }
 }
 
 @media (max-height: 650px) {
@@ -743,6 +828,7 @@ kbd {
   .title-rail span:last-child { display: none; }
   .hud-top { gap: 7px; }
   .score-chip { display: none; }
+  .nav-panel { top: 66px; }
   .objective { margin-left: auto; }
   .hud-bottom { gap: 6px; }
   .weapon-stat { min-width: 125px; }

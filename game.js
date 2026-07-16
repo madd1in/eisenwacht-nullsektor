@@ -39,6 +39,10 @@
     bossWrap: document.querySelector("#boss-wrap"),
     bossHealth: document.querySelector("#boss-health"),
     bossHealthText: document.querySelector("#boss-health-text"),
+    minimap: document.querySelector("#minimap"),
+    compassHeading: document.querySelector("#compass-heading"),
+    waypointArrow: document.querySelector("#waypoint-arrow"),
+    waypointDistance: document.querySelector("#waypoint-distance"),
     resume: document.querySelector("#resume-button"),
     mute: document.querySelector("#mute-button"),
     restart: document.querySelector("#restart-button"),
@@ -55,6 +59,10 @@
   ui.keyValue = ui.key.querySelector("b");
   ui.coreValue = ui.core.querySelector("b");
   ui.touchStickKnob = ui.touchStick.querySelector("i");
+  ui.minimap.width = 128;
+  ui.minimap.height = 128;
+  ui.minimapContext = ui.minimap.getContext("2d");
+  ui.minimapContext.imageSmoothingEnabled = false;
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const normalizeAngle = (angle) => {
@@ -240,6 +248,12 @@
     { fog: "7,5,18", accent: "151,113,255", grid: "77,63,143", pulse: "80,43,120" },
   ];
 
+  const FLOOR_STYLES = [
+    { base: [25, 45, 45], alternate: [32, 58, 57], seam: [63, 119, 111], fog: [2, 10, 11] },
+    { base: [61, 35, 29], alternate: [78, 43, 32], seam: [155, 68, 39], fog: [16, 5, 4] },
+    { base: [32, 33, 56], alternate: [43, 43, 76], seam: [100, 86, 173], fog: [7, 5, 18] },
+  ];
+
   const MUSIC_THEMES = [
     { bpm: 102, bass: [55, 55, 65.41, 49, 55, 73.42, 65.41, 49], lead: [220, 261.63, 293.66, 196] },
     { bpm: 114, bass: [49, 49, 58.27, 43.65, 49, 65.41, 58.27, 43.65], lead: [196, 233.08, 261.63, 174.61] },
@@ -292,6 +306,7 @@
     totalKills: 0,
     soundAlert: 0,
     hadPointerLock: false,
+    navTimer: 0,
   };
 
   class SynthAudio {
@@ -628,6 +643,26 @@
       g.fillStyle = "#b7fff4";
       g.fillRect(20, 58, 7, 4);
       g.fillRect(37, 58, 7, 4);
+      g.strokeStyle = hurt ? "#ffffff" : "#5fb3b2";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(24, 28 + shift);
+      g.lineTo(19, 18 + shift);
+      g.lineTo(15, 16 + shift);
+      g.moveTo(40, 28 + shift);
+      g.lineTo(45, 18 + shift);
+      g.lineTo(49, 16 + shift);
+      g.stroke();
+      g.fillStyle = "#101a1c";
+      g.fillRect(7, 39 + shift, 10, 5);
+      g.fillRect(47, 39 + shift, 10, 5);
+      g.fillRect(14, 51 + shift, 9, 10);
+      g.fillRect(41, 51 + shift, 9, 10);
+      g.fillStyle = "#ffb545";
+      g.fillRect(9, 40 + shift, 5, 2);
+      g.fillRect(50, 40 + shift, 5, 2);
+      g.fillStyle = "#a9fff4";
+      g.fillRect(26, 31 + shift, 12, 2);
       return sprite;
     }
 
@@ -672,6 +707,24 @@
       g.fillStyle = "rgba(255,79,50,.25)";
       g.fillRect(24, 38, 16, 18);
     }
+    g.fillStyle = dark;
+    g.fillRect(boss ? 6 : 13, boss ? 31 : 36, boss ? 15 : 11, 9);
+    g.fillRect(boss ? 43 : 40, boss ? 31 : 36, boss ? 15 : 11, 9);
+    g.fillStyle = armorLight;
+    g.fillRect(boss ? 8 : 15, boss ? 32 : 37, boss ? 11 : 7, 3);
+    g.fillRect(boss ? 45 : 42, boss ? 32 : 37, boss ? 11 : 7, 3);
+    g.fillStyle = "#0b1113";
+    g.fillRect(boss ? 9 : 14, boss ? 45 : 47, boss ? 46 : 37, boss ? 9 : 7);
+    g.fillRect(boss ? 43 : 40, boss ? 42 : 44, boss ? 17 : 15, boss ? 6 : 5);
+    g.fillStyle = boss ? "#d86343" : "#687879";
+    g.fillRect(boss ? 13 : 18, boss ? 47 : 49, boss ? 32 : 20, 3);
+    g.fillStyle = "#70f6e2";
+    g.fillRect(boss ? 22 : 25, boss ? 35 : 40, boss ? 20 : 14, 3);
+    g.fillStyle = "#0d1517";
+    g.fillRect(boss ? 19 : 22, boss ? 60 : 61, boss ? 10 : 8, 5);
+    g.fillRect(boss ? 35 : 35, boss ? 60 : 61, boss ? 10 : 8, 5);
+    g.fillStyle = "#ffb545";
+    g.fillRect(boss ? 53 : 49, boss ? 44 : 46, boss ? 8 : 7, 3);
     return sprite;
   }
 
@@ -745,6 +798,88 @@
     return sprite;
   }
 
+  function makeWeaponModel(type) {
+    const model = document.createElement("canvas");
+    model.width = 220;
+    model.height = 175;
+    const g = model.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    const polygon = (points, fill, stroke = "#090e10", width = 4) => {
+      g.beginPath();
+      g.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i += 1) g.lineTo(points[i][0], points[i][1]);
+      g.closePath();
+      g.fillStyle = fill;
+      g.fill();
+      if (stroke) {
+        g.strokeStyle = stroke;
+        g.lineWidth = width;
+        g.stroke();
+      }
+    };
+    const metal = g.createLinearGradient(45, 0, 175, 0);
+    metal.addColorStop(0, "#1a2428");
+    metal.addColorStop(0.45, "#6f8386");
+    metal.addColorStop(0.55, "#35464b");
+    metal.addColorStop(1, "#11191c");
+    const darkMetal = g.createLinearGradient(55, 0, 165, 0);
+    darkMetal.addColorStop(0, "#11191c");
+    darkMetal.addColorStop(0.5, "#35464a");
+    darkMetal.addColorStop(1, "#0a1012");
+
+    if (type === "pistol") {
+      polygon([[91, 173], [129, 173], [126, 104], [94, 104]], "#202c2f");
+      g.fillStyle = "#4b5d5d";
+      for (let y = 115; y < 164; y += 9) g.fillRect(96, y, 28, 3);
+      polygon([[63, 116], [157, 116], [146, 65], [74, 65]], darkMetal);
+      polygon([[73, 74], [147, 74], [134, 28], [86, 28]], metal);
+      polygon([[87, 32], [133, 32], [129, 16], [91, 16]], "#121a1d", "#060a0b", 3);
+      g.fillStyle = "#020506";
+      g.fillRect(99, 19, 22, 10);
+      g.fillStyle = "#70f6e2";
+      g.fillRect(102, 23, 16, 3);
+      g.fillStyle = "#162124";
+      g.fillRect(82, 78, 56, 26);
+      g.fillStyle = "#ff5b35";
+      g.fillRect(88, 83, 8, 15);
+      g.fillStyle = "#70f6e2";
+      g.fillRect(101, 86, 32, 5);
+      g.fillStyle = "#a9c2c2";
+      g.fillRect(80, 39, 5, 25);
+      g.fillRect(135, 39, 5, 25);
+      g.fillStyle = "#0a1012";
+      g.fillRect(106, 7, 8, 11);
+      g.fillStyle = "#ffb545";
+      g.fillRect(108, 5, 4, 4);
+    } else {
+      polygon([[72, 174], [148, 174], [142, 120], [78, 120]], "#172226");
+      polygon([[34, 139], [186, 139], [164, 74], [56, 74]], darkMetal, "#080d0f", 5);
+      polygon([[50, 91], [170, 91], [148, 31], [72, 31]], metal);
+      polygon([[82, 42], [138, 42], [130, 14], [90, 14]], "#101719", "#050809", 4);
+      g.fillStyle = "#020506";
+      g.fillRect(96, 17, 28, 16);
+      g.fillStyle = "#70f6e2";
+      g.fillRect(100, 21, 20, 7);
+      g.fillStyle = "#152326";
+      g.fillRect(44, 96, 132, 27);
+      g.fillStyle = "#ff4f32";
+      g.fillRect(40, 102, 18, 10);
+      g.fillRect(162, 102, 18, 10);
+      g.fillStyle = "#70f6e2";
+      for (let x = 68; x <= 144; x += 19) g.fillRect(x, 84, 11, 6);
+      g.fillStyle = "#8da1a3";
+      g.fillRect(60, 47, 7, 26);
+      g.fillRect(153, 47, 7, 26);
+      g.fillStyle = "#0a1113";
+      g.fillRect(105, 4, 10, 12);
+      g.fillStyle = "#ffb545";
+      g.fillRect(108, 2, 4, 5);
+      polygon([[48, 139], [75, 139], [68, 160], [40, 154]], "#29383b", "#0a1012", 3);
+      polygon([[145, 139], [172, 139], [180, 154], [152, 160]], "#29383b", "#0a1012", 3);
+    }
+    return model;
+  }
+
   const textures = {
     1: makeTexture("1"),
     2: makeTexture("2"),
@@ -761,6 +896,10 @@
     sprites[`${type}hurt`] = makeEnemySprite(type, 0, true);
   }
   for (const type of ["medkit", "ammo", "key", "core", "weapon"]) sprites[type] = makeItemSprite(type);
+  const weaponModels = {
+    pistol: makeWeaponModel("pistol"),
+    repeater: makeWeaponModel("repeater"),
+  };
 
   function createPlayer() {
     return {
@@ -842,8 +981,10 @@
     state.reloadTimer = 0;
     state.soundAlert = 0;
     state.shake = 0;
+    state.navTimer = 0;
     audio.resetMusic();
     updateHud();
+    updateNavigation(true);
   }
 
   function newGame(difficulty = "agent") {
@@ -994,6 +1135,91 @@
       ui.bossHealth.style.width = `${percent}%`;
       ui.bossHealthText.textContent = `${Math.ceil(percent)}%`;
     }
+  }
+
+  function findObjectiveTarget() {
+    const boss = state.enemies.find((enemy) => enemy.alive && enemy.type === "boss");
+    if (boss) return { x: boss.x, y: boss.y, type: "boss" };
+    const key = state.items.find((item) => item.alive && item.type === "key");
+    if (key) return { x: key.x, y: key.y, type: "key" };
+    const core = state.items.find((item) => item.alive && item.type === "core");
+    if (core) return { x: core.x, y: core.y, type: "core" };
+    for (let y = 0; y < state.map.length; y += 1) {
+      for (let x = 0; x < state.map[y].length; x += 1) {
+        if (state.map[y][x] === "X") return { x: x + 0.5, y: y + 0.5, type: "exit" };
+      }
+    }
+    return null;
+  }
+
+  function updateNavigation(force = false) {
+    if (!state.player || !state.map || (!force && state.navTimer > 0)) return;
+    state.navTimer = 0.08;
+    const mapContext = ui.minimapContext;
+    const mapSize = 128;
+    const cell = 7;
+    const offset = (mapSize - state.map[0].length * cell) / 2;
+    const atmosphere = ATMOSPHERES[state.levelIndex];
+    mapContext.clearRect(0, 0, mapSize, mapSize);
+    mapContext.fillStyle = "rgba(1,7,9,.96)";
+    mapContext.fillRect(0, 0, mapSize, mapSize);
+
+    for (let y = 0; y < state.map.length; y += 1) {
+      for (let x = 0; x < state.map[y].length; x += 1) {
+        const tile = state.map[y][x];
+        if (tile === "0") {
+          mapContext.fillStyle = `rgba(${atmosphere.grid},.1)`;
+          mapContext.fillRect(offset + x * cell + 2, offset + y * cell + 2, cell - 4, cell - 4);
+          continue;
+        }
+        mapContext.fillStyle = tile === "X"
+          ? "#70f6e2"
+          : tile === "L"
+            ? "#ffb545"
+            : tile === "D"
+              ? "#78a7a2"
+              : `rgba(${atmosphere.grid},.62)`;
+        mapContext.fillRect(offset + x * cell, offset + y * cell, cell - 1, cell - 1);
+      }
+    }
+
+    for (const enemy of state.enemies) {
+      if (!enemy.alive || Math.hypot(enemy.x - state.player.x, enemy.y - state.player.y) > 5.5) continue;
+      mapContext.fillStyle = enemy.type === "barrel" ? "#ffb545" : enemy.type === "boss" ? "#ff2e52" : "#ff6244";
+      mapContext.fillRect(offset + enemy.x * cell - 2, offset + enemy.y * cell - 2, 4, 4);
+    }
+
+    const target = findObjectiveTarget();
+    if (target) {
+      const pulse = 2.6 + (Math.sin(state.time * 5) + 1) * 1.2;
+      mapContext.strokeStyle = target.type === "boss" ? "#ff4f32" : "#70f6e2";
+      mapContext.lineWidth = 1.5;
+      mapContext.beginPath();
+      mapContext.arc(offset + target.x * cell, offset + target.y * cell, pulse, 0, TAU);
+      mapContext.stroke();
+      const angle = Math.atan2(target.y - state.player.y, target.x - state.player.x);
+      const relative = normalizeAngle(angle - state.player.dir);
+      ui.waypointArrow.style.transform = `rotate(${relative}rad)`;
+      ui.waypointDistance.textContent = `${Math.ceil(Math.hypot(target.x - state.player.x, target.y - state.player.y) * 3)} M`;
+    }
+
+    mapContext.save();
+    mapContext.translate(offset + state.player.x * cell, offset + state.player.y * cell);
+    mapContext.rotate(state.player.dir);
+    mapContext.fillStyle = "#effffb";
+    mapContext.beginPath();
+    mapContext.moveTo(5, 0);
+    mapContext.lineTo(-4, -3.5);
+    mapContext.lineTo(-2, 0);
+    mapContext.lineTo(-4, 3.5);
+    mapContext.closePath();
+    mapContext.fill();
+    mapContext.restore();
+
+    const degrees = (state.player.dir * 180 / Math.PI + 360) % 360;
+    const headings = ["O", "SO", "S", "SW", "W", "NW", "N", "NO"];
+    const label = headings[Math.round(degrees / 45) % headings.length];
+    ui.compassHeading.textContent = `${label} // ${Math.round(degrees).toString().padStart(3, "0")}`;
   }
 
   function pickupItem(item) {
@@ -1335,6 +1561,7 @@
     const player = state.player;
     state.fireCooldown = Math.max(0, state.fireCooldown - dt);
     state.soundAlert = Math.max(0, state.soundAlert - dt);
+    state.navTimer -= dt;
     state.weaponKick = Math.max(0, state.weaponKick - dt * 7.2);
     state.muzzle = Math.max(0, state.muzzle - dt * 12);
     state.shake = Math.max(0, state.shake - dt * 12);
@@ -1371,6 +1598,7 @@
     updateParticles(dt);
     const combat = state.enemies.some((enemy) => enemy.alive && enemy.type !== "barrel" && enemy.alert && (enemy.visible || enemy.type === "boss"));
     audio.updateMusic(dt, state.levelIndex, combat);
+    updateNavigation();
     if (state.messageVisible && state.messageUntil < state.time) {
       state.messageVisible = false;
       ui.message.classList.remove("show");
@@ -1396,14 +1624,82 @@
     ceiling: makeGradientStrip("#05090d", level.ceiling),
     floor: makeGradientStrip(level.floor, "#030506"),
   }));
+  const floorCanvas = document.createElement("canvas");
+  floorCanvas.width = W;
+  floorCanvas.height = H;
+  const floorContext = floorCanvas.getContext("2d");
+  const floorImage = floorContext.createImageData(W, H);
   const zBuffer = new Float32Array(W);
   const renderQueue = [];
+
+  function renderFloor(horizon) {
+    const data = floorImage.data;
+    data.fill(0);
+    const style = FLOOR_STYLES[state.levelIndex];
+    const leftAngle = state.player.dir - FOV / 2;
+    const rightAngle = state.player.dir + FOV / 2;
+    const leftX = Math.cos(leftAngle);
+    const leftY = Math.sin(leftAngle);
+    const rightX = Math.cos(rightAngle);
+    const rightY = Math.sin(rightAngle);
+    const startY = Math.max(0, Math.ceil(horizon + 2));
+
+    for (let y = startY; y < H; y += 2) {
+      const rowDistance = (0.5 * PROJECTION) / Math.max(1, y - horizon);
+      const worldStepX = rowDistance * (rightX - leftX) / W;
+      const worldStepY = rowDistance * (rightY - leftY) / W;
+      let worldX = state.player.x + rowDistance * leftX;
+      let worldY = state.player.y + rowDistance * leftY;
+      const visibility = clamp(1 - rowDistance / 15, 0.1, 0.92);
+
+      for (let x = 0; x < W; x += 2) {
+        const tileX = Math.floor(worldX);
+        const tileY = Math.floor(worldY);
+        const localX = worldX - tileX;
+        const localY = worldY - tileY;
+        const seam = localX < 0.055 || localY < 0.055 || localX > 0.945 || localY > 0.945;
+        const checker = (tileX + tileY) & 1;
+        const circuit = state.levelIndex === 2 && ((Math.floor(localX * 8) === 2 && tileY % 3 === 0) || (Math.floor(localY * 8) === 5 && tileX % 3 === 0));
+        const hazard = state.levelIndex === 1 && (tileX + tileY) % 7 === 0 && Math.floor((localX + localY) * 8) % 3 === 0;
+        const rivet = state.levelIndex === 0 && Math.abs(localX - 0.5) < 0.035 && Math.abs(localY - 0.5) < 0.035;
+        const source = hazard
+          ? [188, 112, 37]
+          : circuit
+            ? [68, 181, 177]
+            : seam || rivet
+              ? style.seam
+              : checker
+                ? style.alternate
+                : style.base;
+        const boost = hazard ? 1.28 : circuit ? 1.22 + Math.sin(state.time * 4) * 0.08 : 1;
+        const shade = visibility * boost;
+        const red = clamp(source[0] * shade + style.fog[0] * (1 - visibility), 0, 255);
+        const green = clamp(source[1] * shade + style.fog[1] * (1 - visibility), 0, 255);
+        const blue = clamp(source[2] * shade + style.fog[2] * (1 - visibility), 0, 255);
+
+        for (let blockY = 0; blockY < 2 && y + blockY < H; blockY += 1) {
+          for (let blockX = 0; blockX < 2 && x + blockX < W; blockX += 1) {
+            const index = ((y + blockY) * W + x + blockX) * 4;
+            data[index] = red;
+            data[index + 1] = green;
+            data[index + 2] = blue;
+            data[index + 3] = 255;
+          }
+        }
+        worldX += worldStepX * 2;
+        worldY += worldStepY * 2;
+      }
+    }
+    floorContext.putImageData(floorImage, 0, 0);
+    ctx.drawImage(floorCanvas, 0, 0);
+  }
 
   function drawBackground(horizon) {
     const strips = backgroundStrips[state.levelIndex];
     const atmosphere = ATMOSPHERES[state.levelIndex];
     ctx.drawImage(strips.ceiling, 0, 0, 1, 64, 0, 0, W, horizon);
     ctx.drawImage(strips.floor, 0, 0, 1, 64, 0, horizon, W, H - horizon);
+    renderFloor(horizon);
 
     const vanishingX = W / 2 - Math.sin(state.player.dir) * W * 0.1;
     ctx.strokeStyle = `rgba(${atmosphere.grid},.12)`;
@@ -1572,36 +1868,11 @@
     ctx.lineTo(16, 0);
     ctx.fill();
 
-    if (state.player.weapon === "pistol") {
-      ctx.fillStyle = "#151c1e";
-      ctx.fillRect(-23, -83, 46, 75);
-      ctx.fillStyle = "#344144";
-      ctx.fillRect(-28, -111, 56, 43);
-      ctx.fillStyle = "#58676a";
-      ctx.fillRect(-24, -108, 48, 8);
-      ctx.fillStyle = "#0b0f10";
-      ctx.fillRect(-13, -119, 26, 16);
-      ctx.fillStyle = "#70f6e2";
-      ctx.fillRect(-3, -114, 6, 3);
-    } else {
-      ctx.fillStyle = "#12191b";
-      ctx.fillRect(-36, -76, 72, 70);
-      ctx.fillStyle = "#33454a";
-      ctx.fillRect(-55, -101, 110, 42);
-      ctx.fillStyle = "#1e292c";
-      ctx.fillRect(-42, -119, 84, 23);
-      ctx.fillStyle = "#547077";
-      ctx.fillRect(-34, -116, 68, 5);
-      ctx.fillStyle = "#70f6e2";
-      ctx.fillRect(-25, -95, 50, 4);
-      ctx.fillStyle = "#ff4f32";
-      ctx.fillRect(31, -91, 18, 6);
-      ctx.fillStyle = "#0a0e10";
-      ctx.fillRect(-19, -132, 38, 17);
-    }
+    const weaponModel = weaponModels[state.player.weapon];
+    ctx.drawImage(weaponModel, -weaponModel.width / 2, -weaponModel.height);
 
     if (state.muzzle > 0) {
-      const muzzleY = state.player.weapon === "pistol" ? -120 : -133;
+      const muzzleY = state.player.weapon === "pistol" ? -165 : -169;
       ctx.globalCompositeOperation = "screen";
       ctx.fillStyle = `rgba(255,210,92,${state.muzzle})`;
       ctx.beginPath();
@@ -1622,7 +1893,7 @@
   function render() {
     if (!state.level || !state.player) return;
     const bob = state.moving ? Math.sin(state.moveBob * 2) * 1.2 : 0;
-    const horizon = clamp(H / 2 + state.player.pitch + bob, 100, 245);
+    const horizon = clamp(H / 2 + state.player.pitch + bob, H * 0.28, H * 0.72);
     const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
     const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
     ctx.save();
@@ -1855,6 +2126,8 @@
     applyLookInput,
     audio,
     killEnemy,
+    findObjectiveTarget,
+    updateNavigation,
   };
   requestAnimationFrame(loop);
 })();

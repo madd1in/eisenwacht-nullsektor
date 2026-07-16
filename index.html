@@ -32,6 +32,15 @@
           <div class="score-chip"><span>PUNKTE</span><strong id="score">000000</strong></div>
         </div>
 
+        <aside class="nav-panel" aria-label="Taktische Navigation">
+          <div class="compass-strip"><span>KURS</span><strong id="compass-heading">O // 090</strong></div>
+          <canvas id="minimap" width="128" height="128" aria-label="Minikarte"></canvas>
+          <div class="waypoint-readout">
+            <i id="waypoint-arrow">▲</i>
+            <span><small>ZIEL</small><b id="waypoint-distance">-- M</b></span>
+          </div>
+        </aside>
+
         <div id="message" class="message" role="status"></div>
         <div id="crosshair" class="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 

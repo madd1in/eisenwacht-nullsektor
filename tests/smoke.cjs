@@ -22,6 +22,7 @@ function makeContext() {
   const target = {
     createLinearGradient: () => gradient,
     createRadialGradient: () => gradient,
+    createImageData: (width, height) => ({ width, height, data: new Uint8ClampedArray(width * height * 4) }),
     getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
     putImageData() {},
     measureText: () => ({ width: 0 }),
@@ -127,6 +128,8 @@ game.start("agent");
 assert.equal(game.state.mode, "running");
 assert.equal(game.state.levelIndex, 0);
 assert.equal(game.state.player.health, 100);
+assert.equal(game.findObjectiveTarget()?.type, "core", "navigation should point to the current mission objective");
+game.updateNavigation(true);
 
 game.state.player.pitch = 0;
 
@@ -162,7 +165,12 @@ assert.ok(movement > 0.18, "a 66ms frame should preserve real-time movement inst
 canvasMetrics.drawImage = 0;
 canvasMetrics.fillRect = 0;
 game.render();
-assert.ok(canvasMetrics.drawImage < 350, `batched renderer should stay below 350 draw calls, got ${canvasMetrics.drawImage}`);
+const drawCallsForFrame = canvasMetrics.drawImage;
+assert.ok(drawCallsForFrame < 350, `batched renderer should stay below 350 draw calls, got ${drawCallsForFrame}`);
+const renderBenchmarkStart = performance.now();
+for (let frame = 0; frame < 12; frame += 1) game.render();
+const renderAverage = (performance.now() - renderBenchmarkStart) / 12;
+assert.ok(renderAverage < 16, `procedural floor and models should render in under 16ms in the smoke harness, got ${renderAverage.toFixed(2)}ms`);
 
 const barrel = game.state.enemies.find((enemy) => enemy.type === "barrel" && enemy.alive);
 const blastTarget = game.state.enemies.find((enemy) => enemy.type === "guard" && enemy.alive);
@@ -194,5 +202,5 @@ assert.equal(game.state.levelIndex, 1, "completing a mission should load the nex
 assert.equal(game.state.levelCore, false, "mission inventory should reset between levels");
 
 console.log(
-  `Eisenwacht smoke test passed: 3 missions, adaptive BGM, reactor blast, ${(movement / 0.066).toFixed(2)} movement units/s, ${canvasMetrics.drawImage} render draw calls.`
+  `Eisenwacht smoke test passed: navigation, textured floor, adaptive BGM, reactor blast, ${renderAverage.toFixed(2)}ms render, ${drawCallsForFrame} draw calls.`
 );
