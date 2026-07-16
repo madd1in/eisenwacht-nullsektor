@@ -11,7 +11,10 @@ Ein eigenständiger, asset-freier Retro-Raycaster für den Browser. Das Spiel is
 - Drei zusammenhängende Missionen inklusive Boss-Finale
 - DDA-Raycaster mit prozeduralen Wandtexturen und Pixel-Sprites
 - Zwei Waffen, Gegner-KI, Türen, Schlüssel, Pickups und Missionsziele
+- Adaptive prozedurale BGM mit zusätzlichen Combat-Layern
 - Synthetisierte Audioeffekte ohne externe Dateien
+- Explosive Reaktorfässer mit Flächenschaden und Kettenreaktionen
+- Weltpartikel, farbiger Tiefennebel und animierte Sektorbeleuchtung
 - Maus-, Tastatur- und Touch-Steuerung
 - Lokaler Highscore und installierbares Web-App-Manifest
 

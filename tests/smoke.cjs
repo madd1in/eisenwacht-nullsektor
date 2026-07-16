@@ -90,6 +90,7 @@ const game = global.__eisenwacht;
 assert.ok(game, "debug API should be exposed");
 assert.equal(game.levels.length, 3, "campaign should contain three missions");
 assert.deepEqual(game.validate(), [], "all level entities should stand on walkable tiles");
+assert.equal(typeof game.audio.updateMusic, "function", "adaptive music sequencer should be available");
 
 for (const [index, level] of game.levels.entries()) {
   let spawn;
@@ -128,6 +129,21 @@ assert.equal(game.state.levelIndex, 0);
 assert.equal(game.state.player.health, 100);
 
 game.state.player.pitch = 0;
+
+let scheduledNotes = 0;
+const originalTone = game.audio.tone;
+const originalNoise = game.audio.noise;
+game.audio.context = {};
+game.audio.musicBus = {};
+game.audio.tone = () => { scheduledNotes += 1; };
+game.audio.noise = () => { scheduledNotes += 1; };
+game.audio.resetMusic();
+game.audio.updateMusic(0.2, 0, false);
+assert.ok(scheduledNotes >= 2, "background music should schedule rhythm and bass layers");
+game.audio.tone = originalTone;
+game.audio.noise = originalNoise;
+game.audio.context = null;
+game.audio.musicBus = null;
 game.applyLookInput(0, 10);
 assert.ok(game.state.player.pitch < 0, "moving the pointer down should look down, not up");
 game.state.player.pitch = 0;
@@ -148,6 +164,26 @@ canvasMetrics.fillRect = 0;
 game.render();
 assert.ok(canvasMetrics.drawImage < 350, `batched renderer should stay below 350 draw calls, got ${canvasMetrics.drawImage}`);
 
+const barrel = game.state.enemies.find((enemy) => enemy.type === "barrel" && enemy.alive);
+const blastTarget = game.state.enemies.find((enemy) => enemy.type === "guard" && enemy.alive);
+blastTarget.x = barrel.x + 2;
+blastTarget.y = barrel.y;
+const targetHealthBefore = blastTarget.health;
+const killsBeforeBarrel = game.state.totalKills;
+game.killEnemy(barrel);
+assert.equal(barrel.alive, false, "reactor barrel should be destructible");
+assert.ok(blastTarget.health < targetHealthBefore, "reactor barrel should deal area damage");
+assert.equal(game.state.totalKills, killsBeforeBarrel, "destroying scenery should not count as an enemy kill");
+assert.ok(game.state.particles.length >= 20, "explosion should create a visible particle burst");
+
+const originalEnemies = game.state.enemies;
+const chainBarrelA = { ...barrel, id: "chain-a", x: 10, y: 10, health: 46, alive: true };
+const chainBarrelB = { ...barrel, id: "chain-b", x: 11, y: 10, health: 46, alive: true };
+game.state.enemies = [chainBarrelA, chainBarrelB];
+game.killEnemy(chainBarrelA);
+assert.equal(chainBarrelB.alive, false, "nearby reactor barrels should trigger a chain reaction");
+game.state.enemies = originalEnemies;
+
 const ammoBefore = game.state.player.arsenal.pistol.clip;
 game.shoot();
 assert.equal(game.state.player.arsenal.pistol.clip, ammoBefore - 1, "shooting should consume one round");
@@ -158,5 +194,5 @@ assert.equal(game.state.levelIndex, 1, "completing a mission should load the nex
 assert.equal(game.state.levelCore, false, "mission inventory should reset between levels");
 
 console.log(
-  `Eisenwacht smoke test passed: 3 missions, ${(movement / 0.066).toFixed(2)} movement units/s, ${canvasMetrics.drawImage} render draw calls.`
+  `Eisenwacht smoke test passed: 3 missions, adaptive BGM, reactor blast, ${(movement / 0.066).toFixed(2)} movement units/s, ${canvasMetrics.drawImage} render draw calls.`
 );

@@ -100,10 +100,12 @@
       `),
       enemies: [
         { type: "guard", x: 4.5, y: 3.5 },
+        { type: "barrel", x: 3.5, y: 7.5 },
         { type: "guard", x: 8.5, y: 5.5 },
         { type: "drone", x: 12.5, y: 7.5 },
         { type: "guard", x: 6.5, y: 11.5 },
         { type: "drone", x: 11.5, y: 13.5 },
+        { type: "barrel", x: 13.5, y: 13.5 },
       ],
       items: [
         { type: "ammo", x: 2.5, y: 5.5 },
@@ -140,11 +142,13 @@
       enemies: [
         { type: "guard", x: 4.5, y: 3.5 },
         { type: "drone", x: 8.5, y: 3.5 },
+        { type: "barrel", x: 8.5, y: 5.5 },
         { type: "guard", x: 5.5, y: 5.5 },
         { type: "drone", x: 10.5, y: 7.5 },
         { type: "guard", x: 8.5, y: 9.5 },
         { type: "guard", x: 6.5, y: 11.5 },
         { type: "drone", x: 12.5, y: 11.5 },
+        { type: "barrel", x: 14.5, y: 11.5 },
       ],
       items: [
         { type: "ammo", x: 4.5, y: 1.5 },
@@ -183,10 +187,13 @@
       enemies: [
         { type: "guard", x: 5.5, y: 3.5 },
         { type: "drone", x: 12.5, y: 3.5 },
+        { type: "barrel", x: 7.5, y: 5.5 },
+        { type: "barrel", x: 9.5, y: 5.5 },
         { type: "guard", x: 2.5, y: 7.5 },
         { type: "drone", x: 13.5, y: 7.5 },
         { type: "boss", x: 7.5, y: 8.5 },
         { type: "guard", x: 2.5, y: 13.5 },
+        { type: "barrel", x: 8.5, y: 13.5 },
         { type: "drone", x: 12.5, y: 13.5 },
       ],
       items: [
@@ -224,7 +231,20 @@
     guard: { health: 76, speed: 0.76, damage: 9, range: 7.5, rate: 1.15, radius: 0.22, height: 0.93, score: 300 },
     drone: { health: 54, speed: 0.93, damage: 7, range: 8.5, rate: 0.88, radius: 0.2, height: 0.72, score: 450 },
     boss: { health: 620, speed: 0.52, damage: 14, range: 10, rate: 0.52, radius: 0.36, height: 1.36, score: 5000 },
+    barrel: { health: 46, speed: 0, damage: 0, range: 0, rate: 99, radius: 0.25, height: 0.66, score: 150 },
   };
+
+  const ATMOSPHERES = [
+    { fog: "2,10,11", accent: "112,246,226", grid: "43,127,120", pulse: "28,96,91" },
+    { fog: "16,5,4", accent: "255,98,60", grid: "139,52,34", pulse: "120,31,22" },
+    { fog: "7,5,18", accent: "151,113,255", grid: "77,63,143", pulse: "80,43,120" },
+  ];
+
+  const MUSIC_THEMES = [
+    { bpm: 102, bass: [55, 55, 65.41, 49, 55, 73.42, 65.41, 49], lead: [220, 261.63, 293.66, 196] },
+    { bpm: 114, bass: [49, 49, 58.27, 43.65, 49, 65.41, 58.27, 43.65], lead: [196, 233.08, 261.63, 174.61] },
+    { bpm: 126, bass: [41.2, 51.91, 46.25, 38.89, 41.2, 61.74, 51.91, 46.25], lead: [164.81, 207.65, 246.94, 185] },
+  ];
 
   const DIFFICULTIES = {
     rekrut: { enemyHealth: 0.78, enemyDamage: 0.6, enemyAim: 0.72 },
@@ -251,6 +271,7 @@
     player: null,
     enemies: [],
     items: [],
+    particles: [],
     score: 0,
     levelCore: false,
     hasKey: false,
@@ -277,9 +298,12 @@
     constructor() {
       this.context = null;
       this.master = null;
+      this.musicBus = null;
       this.enabled = true;
       this.noiseBuffer = null;
       this.hum = null;
+      this.musicStep = 0;
+      this.musicTimer = 0;
     }
 
     ensure() {
@@ -291,6 +315,9 @@
         this.master = this.context.createGain();
         this.master.gain.value = 0.18;
         this.master.connect(this.context.destination);
+        this.musicBus = this.context.createGain();
+        this.musicBus.gain.value = 0.38;
+        this.musicBus.connect(this.master);
         this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
         const channel = this.noiseBuffer.getChannelData(0);
         for (let i = 0; i < channel.length; i += 1) channel[i] = Math.random() * 2 - 1;
@@ -299,7 +326,7 @@
       return true;
     }
 
-    tone(frequency, duration, type = "square", volume = 0.25, endFrequency = frequency) {
+    tone(frequency, duration, type = "square", volume = 0.25, endFrequency = frequency, bus = null) {
       if (!this.ensure()) return;
       const now = this.context.currentTime;
       const osc = this.context.createOscillator();
@@ -309,12 +336,12 @@
       osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), now + duration);
       gain.gain.setValueAtTime(volume, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-      osc.connect(gain).connect(this.master);
+      osc.connect(gain).connect(bus || this.master);
       osc.start(now);
       osc.stop(now + duration + 0.02);
     }
 
-    noise(duration = 0.12, volume = 0.2, cutoff = 1200) {
+    noise(duration = 0.12, volume = 0.2, cutoff = 1200, bus = null) {
       if (!this.ensure()) return;
       const now = this.context.currentTime;
       const source = this.context.createBufferSource();
@@ -325,7 +352,7 @@
       filter.frequency.value = cutoff;
       gain.gain.setValueAtTime(volume, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-      source.connect(filter).connect(gain).connect(this.master);
+      source.connect(filter).connect(gain).connect(bus || this.master);
       source.start(now);
       source.stop(now + duration);
     }
@@ -364,6 +391,12 @@
       window.setTimeout(() => this.tone(210, 0.05, "square", 0.06, 160), 420);
     }
 
+    explosion() {
+      this.noise(0.42, 0.5, 720);
+      this.tone(82, 0.34, "sawtooth", 0.28, 28);
+      window.setTimeout(() => this.noise(0.2, 0.16, 260), 45);
+    }
+
     win() {
       [220, 330, 440, 660].forEach((frequency, index) => {
         window.setTimeout(() => this.tone(frequency, 0.22, "square", 0.12, frequency * 1.05), index * 140);
@@ -380,6 +413,37 @@
       osc.connect(gain).connect(this.master);
       osc.start();
       this.hum = { osc, gain };
+    }
+
+    resetMusic() {
+      this.musicStep = 0;
+      this.musicTimer = 0.08;
+    }
+
+    updateMusic(dt, levelIndex, combat) {
+      if (!this.enabled || !this.context || !this.musicBus) return;
+      this.musicTimer -= dt;
+      if (this.musicTimer > 0) return;
+      const theme = MUSIC_THEMES[levelIndex] || MUSIC_THEMES[0];
+      const step = this.musicStep % 16;
+      const interval = 60 / theme.bpm / 2;
+      this.musicTimer += interval;
+
+      if (step % 2 === 0) {
+        const bass = theme.bass[(step / 2) % theme.bass.length];
+        this.tone(bass, interval * 0.82, "sawtooth", combat ? 0.13 : 0.09, bass * 0.985, this.musicBus);
+      }
+      if (step % 4 === 0) this.noise(0.055, combat ? 0.09 : 0.055, 170, this.musicBus);
+      if (step % 4 === 2) this.noise(0.035, combat ? 0.07 : 0.035, 2400, this.musicBus);
+      if (step % 8 === 4) {
+        const signal = theme.lead[(step / 4) % theme.lead.length];
+        this.tone(signal, interval * 1.7, "triangle", combat ? 0.07 : 0.035, signal * 0.995, this.musicBus);
+      }
+      if (combat && step % 2 === 1) {
+        const lead = theme.lead[(step + levelIndex) % theme.lead.length] * 1.5;
+        this.tone(lead, interval * 0.44, "square", 0.042, lead * 0.97, this.musicBus);
+      }
+      this.musicStep = (this.musicStep + 1) % 16;
     }
 
     toggle() {
@@ -516,6 +580,35 @@
     g.beginPath();
     g.ellipse(32, 75, type === "boss" ? 25 : 17, 4, 0, 0, TAU);
     g.fill();
+
+    if (type === "barrel") {
+      g.fillStyle = "rgba(255,116,47,.2)";
+      g.beginPath();
+      g.arc(32, 47, 23, 0, TAU);
+      g.fill();
+      g.fillStyle = hurt ? "#ffffff" : "#27383a";
+      g.fillRect(16, 24, 32, 47);
+      g.fillStyle = hurt ? "#ffffff" : "#4e6969";
+      g.fillRect(19, 21, 26, 7);
+      g.fillRect(19, 68, 26, 6);
+      g.fillStyle = "#111a1c";
+      g.fillRect(16, 34, 32, 5);
+      g.fillRect(16, 57, 32, 5);
+      g.fillStyle = frame % 2 ? "#ffb545" : "#ff5b35";
+      g.fillRect(21, 42, 22, 11);
+      g.fillStyle = "#17120c";
+      for (let x = 18; x < 47; x += 10) {
+        g.beginPath();
+        g.moveTo(x, 42);
+        g.lineTo(x + 6, 42);
+        g.lineTo(x, 53);
+        g.lineTo(x - 6, 53);
+        g.fill();
+      }
+      g.fillStyle = "#9ffff0";
+      g.fillRect(29, 27 + shift, 6, 5);
+      return sprite;
+    }
 
     if (type === "drone") {
       g.fillStyle = "rgba(71,234,222,.18)";
@@ -662,7 +755,7 @@
   };
 
   const sprites = {};
-  for (const type of ["guard", "drone", "boss"]) {
+  for (const type of ["guard", "drone", "boss", "barrel"]) {
     sprites[`${type}0`] = makeEnemySprite(type, 0, false);
     sprites[`${type}1`] = makeEnemySprite(type, 1, false);
     sprites[`${type}hurt`] = makeEnemySprite(type, 0, true);
@@ -742,12 +835,14 @@
       };
     });
     state.items = definition.items.map((item, itemIndex) => ({ ...item, id: `${index}-item-${itemIndex}`, alive: true, phase: Math.random() * TAU }));
+    state.particles.length = 0;
     state.levelCore = false;
     state.hasKey = false;
     state.fireCooldown = 0;
     state.reloadTimer = 0;
     state.soundAlert = 0;
     state.shake = 0;
+    audio.resetMusic();
     updateHud();
   }
 
@@ -1016,11 +1111,87 @@
     if (state.player.health <= 0) finishGame(false);
   }
 
-  function killEnemy(enemy) {
+  function spawnParticles(entity, count = 8, explosion = false) {
+    const palette = entity.type === "barrel"
+      ? ["255,181,69", "255,79,50", "112,246,226"]
+      : entity.type === "drone"
+        ? ["112,246,226", "183,255,244", "255,79,50"]
+        : ["255,79,50", "169,49,42", "255,181,69"];
+    const baseHeight = entity.type === "boss" ? 0.95 : entity.type === "barrel" ? 0.48 : 0.62;
+    for (let i = 0; i < count && state.particles.length < 96; i += 1) {
+      const angle = Math.random() * TAU;
+      const speed = (explosion ? 1.4 : 0.55) * (0.45 + Math.random() * 0.75);
+      const life = (explosion ? 0.68 : 0.34) * (0.7 + Math.random() * 0.55);
+      state.particles.push({
+        x: entity.x + (Math.random() - 0.5) * 0.16,
+        y: entity.y + (Math.random() - 0.5) * 0.16,
+        z: baseHeight + (Math.random() - 0.5) * 0.3,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        vz: (explosion ? 1.35 : 0.65) * (0.4 + Math.random()),
+        life,
+        maxLife: life,
+        color: palette[i % palette.length],
+        size: explosion ? 0.045 + Math.random() * 0.045 : 0.025 + Math.random() * 0.025,
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (let i = state.particles.length - 1; i >= 0; i -= 1) {
+      const particle = state.particles[i];
+      particle.life -= dt;
+      if (particle.life <= 0) {
+        state.particles.splice(i, 1);
+        continue;
+      }
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.z += particle.vz * dt;
+      particle.vz -= 2.8 * dt;
+      particle.vx *= 0.992;
+      particle.vy *= 0.992;
+      if (particle.z < 0.035) {
+        particle.z = 0.035;
+        particle.vz = Math.abs(particle.vz) * 0.22;
+        particle.vx *= 0.78;
+        particle.vy *= 0.78;
+      }
+    }
+  }
+
+  function explodeBarrel(barrel) {
+    const blastRadius = 2.45;
+    audio.explosion();
+    spawnParticles(barrel, 34, true);
+    state.shake = Math.max(state.shake, 9);
+    showMessage("REAKTORFASS // KETTENREAKTION", 1.7);
+    for (const target of state.enemies) {
+      if (!target.alive || target === barrel) continue;
+      const distance = Math.hypot(target.x - barrel.x, target.y - barrel.y);
+      if (distance >= blastRadius) continue;
+      target.health -= 155 * (1 - distance / blastRadius);
+      target.flash = 0.14;
+      target.alert = true;
+      if (target.health <= 0) killEnemy(target, "explosion");
+    }
+    const playerDistance = Math.hypot(state.player.x - barrel.x, state.player.y - barrel.y);
+    if (playerDistance < 1.85) damagePlayer(28 * (1 - playerDistance / 1.85));
+  }
+
+  function killEnemy(enemy, source = "weapon") {
+    if (!enemy.alive) return;
     enemy.alive = false;
+    if (enemy.type === "barrel") {
+      state.score += ENEMY_TYPES.barrel.score;
+      explodeBarrel(enemy);
+      updateHud();
+      return;
+    }
     state.totalKills += 1;
     state.score += ENEMY_TYPES[enemy.type].score;
     state.shake = Math.max(state.shake, enemy.type === "boss" ? 6 : 2);
+    spawnParticles(enemy, enemy.type === "boss" ? 30 : source === "explosion" ? 18 : 12, true);
     if (enemy.type === "boss") {
       state.items.push({ type: "core", x: enemy.x, y: enemy.y, alive: true, phase: 0, id: "boss-core" });
       showMessage("VERWALTER NEUTRALISIERT // NULLKERN FREIGELEGT", 4);
@@ -1071,6 +1242,7 @@
       target.health -= damage;
       target.flash = 0.1;
       target.alert = true;
+      spawnParticles(target, 6, false);
       state.score += 15;
       ui.crosshair.classList.add("hit");
       window.setTimeout(() => ui.crosshair.classList.remove("hit"), 85);
@@ -1119,6 +1291,7 @@
       enemy.flash = Math.max(0, enemy.flash - dt);
       enemy.muzzle = Math.max(0, enemy.muzzle - dt);
       enemy.phase += dt * (enemy.alert ? 7 : 2);
+      if (enemy.type === "barrel") continue;
       const dx = player.x - enemy.x;
       const dy = player.y - enemy.y;
       const distance = Math.hypot(dx, dy);
@@ -1195,6 +1368,9 @@
     if (input.firing && WEAPONS[player.weapon].automatic && state.fireCooldown <= 0) shoot();
     updateEnemies(dt);
     updateItems();
+    updateParticles(dt);
+    const combat = state.enemies.some((enemy) => enemy.alive && enemy.type !== "barrel" && enemy.alert && (enemy.visible || enemy.type === "boss"));
+    audio.updateMusic(dt, state.levelIndex, combat);
     if (state.messageVisible && state.messageUntil < state.time) {
       state.messageVisible = false;
       ui.message.classList.remove("show");
@@ -1225,12 +1401,36 @@
 
   function drawBackground(horizon) {
     const strips = backgroundStrips[state.levelIndex];
+    const atmosphere = ATMOSPHERES[state.levelIndex];
     ctx.drawImage(strips.ceiling, 0, 0, 1, 64, 0, 0, W, horizon);
     ctx.drawImage(strips.floor, 0, 0, 1, 64, 0, horizon, W, H - horizon);
 
-    ctx.fillStyle = "rgba(112,246,226,.035)";
-    for (let y = horizon + 20; y < H; y += Math.max(7, Math.floor((y - horizon) * 0.22))) ctx.fillRect(0, y, W, 1);
-    ctx.fillStyle = state.levelIndex === 1 ? "rgba(255,79,50,.035)" : "rgba(112,246,226,.025)";
+    const vanishingX = W / 2 - Math.sin(state.player.dir) * W * 0.1;
+    ctx.strokeStyle = `rgba(${atmosphere.grid},.12)`;
+    ctx.lineWidth = 1;
+    for (let lane = -5; lane <= 5; lane += 1) {
+      ctx.beginPath();
+      ctx.moveTo(vanishingX, horizon + 1);
+      ctx.lineTo(W / 2 + lane * W * 0.13, H);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = `rgba(${atmosphere.accent},.08)`;
+    for (let line = 0; line < 8; line += 1) {
+      const depth = (line / 8 + state.time * 0.17) % 1;
+      const y = horizon + (H - horizon) * depth * depth;
+      ctx.fillRect(0, y, W, depth > 0.75 ? 2 : 1);
+    }
+
+    for (let light = 0; light < 5; light += 1) {
+      const depth = (light / 5 + state.time * 0.065) % 1;
+      const width = 8 + depth * 58;
+      const y = 8 + (horizon - 20) * depth * depth;
+      ctx.fillStyle = `rgba(${atmosphere.accent},${0.025 + depth * 0.08})`;
+      ctx.fillRect(vanishingX - width / 2, y, width, 2 + depth * 2);
+    }
+
+    ctx.fillStyle = `rgba(${atmosphere.accent},.04)`;
     ctx.fillRect(0, horizon - 2, W, 4);
   }
 
@@ -1273,7 +1473,31 @@
     }
   }
 
+  function drawParticles(horizon) {
+    for (const particle of state.particles) {
+      const dx = particle.x - state.player.x;
+      const dy = particle.y - state.player.y;
+      const rawDistance = Math.hypot(dx, dy);
+      if (rawDistance < 0.12) continue;
+      const angle = normalizeAngle(Math.atan2(dy, dx) - state.player.dir);
+      if (Math.abs(angle) > FOV * 0.6) continue;
+      const distance = rawDistance * Math.cos(angle);
+      const screenX = W / 2 + Math.tan(angle) * PROJECTION;
+      const column = Math.floor(screenX);
+      if (column < 0 || column >= W || distance >= zBuffer[column]) continue;
+      const floorLine = horizon + PROJECTION * 0.5 / distance;
+      const screenY = floorLine - PROJECTION * particle.z / distance;
+      const size = clamp(PROJECTION * particle.size / distance, 1, 8);
+      const alpha = clamp(particle.life / particle.maxLife, 0, 1);
+      ctx.fillStyle = `rgba(${particle.color},${alpha * 0.28})`;
+      ctx.fillRect(screenX - size, screenY - size, size * 2, size * 2);
+      ctx.fillStyle = `rgba(${particle.color},${alpha})`;
+      ctx.fillRect(screenX - size * 0.35, screenY - size * 0.35, Math.max(1, size * 0.7), Math.max(1, size * 0.7));
+    }
+  }
+
   function drawWorld(horizon) {
+    const atmosphere = ATMOSPHERES[state.levelIndex];
     for (let x = 0; x < W; x += RAY_STRIDE) {
       const rayAngle = state.player.dir - FOV / 2 + ((x + RAY_STRIDE * 0.5) / W) * FOV;
       const hit = castRay(rayAngle);
@@ -1284,7 +1508,7 @@
       const texture = textures[hit.tile] || textures["1"];
       ctx.drawImage(texture, hit.texX, 0, 1, 64, x, top, RAY_STRIDE + 0.2, wallHeight);
       const darkness = clamp(corrected / 14 + (hit.side ? 0.1 : 0), 0.04, 0.78);
-      ctx.fillStyle = `rgba(2,6,7,${darkness})`;
+      ctx.fillStyle = `rgba(${atmosphere.fog},${darkness})`;
       ctx.fillRect(x, top, RAY_STRIDE + 0.2, wallHeight);
     }
 
@@ -1319,6 +1543,7 @@
         }
       }
     }
+    drawParticles(horizon);
   }
 
   function drawWeapon() {
@@ -1404,6 +1629,14 @@
     ctx.translate(shakeX, shakeY);
     drawBackground(horizon);
     drawWorld(horizon);
+    const atmosphere = ATMOSPHERES[state.levelIndex];
+    const ambientPulse = 0.012 + (Math.sin(state.time * 1.8) + 1) * 0.008;
+    ctx.fillStyle = `rgba(${atmosphere.pulse},${ambientPulse})`;
+    ctx.fillRect(0, 0, W, H);
+    if (state.muzzle > 0) {
+      ctx.fillStyle = `rgba(255,181,69,${state.muzzle * 0.055})`;
+      ctx.fillRect(0, 0, W, H);
+    }
     drawWeapon();
     if (state.damageFlash > 0.35) {
       ctx.fillStyle = `rgba(120,0,0,${state.damageFlash * 0.08})`;
@@ -1620,6 +1853,8 @@
     render,
     simulateElapsed,
     applyLookInput,
+    audio,
+    killEnemy,
   };
   requestAnimationFrame(loop);
 })();
