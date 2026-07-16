@@ -127,6 +127,14 @@ assert.equal(game.state.mode, "running");
 assert.equal(game.state.levelIndex, 0);
 assert.equal(game.state.player.health, 100);
 
+game.state.player.pitch = 0;
+game.applyLookInput(0, 10);
+assert.ok(game.state.player.pitch < 0, "moving the pointer down should look down, not up");
+game.state.player.pitch = 0;
+game.applyLookInput(0, -10);
+assert.ok(game.state.player.pitch > 0, "moving the pointer up should look up, not down");
+game.state.player.pitch = 0;
+
 const startX = game.state.player.x;
 const startY = game.state.player.y;
 game.input.keys.add("KeyW");

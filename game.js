@@ -1453,6 +1453,11 @@
     }
   }
 
+  function applyLookInput(deltaX, deltaY, horizontalSensitivity = 0.0028, verticalSensitivity = 0.15, pitchLimit = 45) {
+    state.player.dir = normalizeAngle(state.player.dir + deltaX * horizontalSensitivity);
+    state.player.pitch = clamp(state.player.pitch - deltaY * verticalSensitivity, -pitchLimit, pitchLimit);
+  }
+
   function validateLevels() {
     const issues = [];
     for (const [levelIndex, level] of LEVELS.entries()) {
@@ -1529,8 +1534,7 @@
 
   window.addEventListener("mousemove", (event) => {
     if (document.pointerLockElement !== canvas || state.mode !== "running") return;
-    state.player.dir = normalizeAngle(state.player.dir + event.movementX * 0.0028);
-    state.player.pitch = clamp(state.player.pitch + event.movementY * 0.15, -45, 45);
+    applyLookInput(event.movementX, event.movementY);
   });
 
   document.addEventListener("pointerlockchange", () => {
@@ -1580,8 +1584,7 @@
   });
   ui.touchLook.addEventListener("pointermove", (event) => {
     if (event.pointerId !== input.lookPointer || state.mode !== "running") return;
-    state.player.dir = normalizeAngle(state.player.dir + (event.clientX - input.lookX) * 0.007);
-    state.player.pitch = clamp(state.player.pitch + (event.clientY - input.lookY) * 0.25, -42, 42);
+    applyLookInput(event.clientX - input.lookX, event.clientY - input.lookY, 0.007, 0.25, 42);
     input.lookX = event.clientX;
     input.lookY = event.clientY;
   });
@@ -1616,6 +1619,7 @@
     input,
     render,
     simulateElapsed,
+    applyLookInput,
   };
   requestAnimationFrame(loop);
 })();
