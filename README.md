@@ -2,6 +2,10 @@
 
 Ein eigenständiger, asset-freier Retro-Raycaster für den Browser. Das Spiel ist von der Technik früher 90er-FPS inspiriert, verwendet aber eine eigene Welt, eigene Figuren und selbst erzeugte Grafik- und Soundeffekte.
 
+## Jetzt spielen
+
+**[Eisenwacht: Nullsektor im Browser starten](https://madd1in.github.io/eisenwacht-nullsektor/)**
+
 ## Enthalten
 
 - Drei zusammenhängende Missionen inklusive Boss-Finale
